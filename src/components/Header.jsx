@@ -1,5 +1,6 @@
 import React from 'react';
 import { Volume2, Flame, Award, BookOpen, Clock, RefreshCw, VolumeX } from 'lucide-react';
+import { speakWord } from '../utils/speech';
 
 export default function Header({ 
   masteredCount, 
@@ -51,13 +52,22 @@ export default function Header({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Streak Counter */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
             <Flame className={`w-4 h-4 ${streak > 0 ? 'text-amber-400 animate-bounce' : 'text-slate-500'}`} />
             <span className="text-sm font-bold text-amber-300 font-mono">{streak}</span>
             <span className="text-xs text-amber-400/80 font-medium">Streak</span>
           </div>
+
+          {/* Test Sound Button */}
+          <button
+            onClick={() => speakWord('Welcome to IELTS Listening Spelling Bee', { accent })}
+            title="Click to Test Audio Sound"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-xl text-xs font-bold text-cyan-300 transition-all"
+          >
+            <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> Test Audio
+          </button>
 
           {/* Voice Accent Switcher */}
           <button

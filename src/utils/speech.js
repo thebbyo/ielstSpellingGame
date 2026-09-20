@@ -1,21 +1,34 @@
-// Hybrid IELTS Listening Audio Engine (Web Speech API + Native Audio Stream Fallback)
+// Bulletproof IELTS Listening Audio Engine (SpeechSynthesis + Multi-Source Native MP3 Audio)
 
 let synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 let voices = [];
 let audioUnlocked = false;
-
-// Audio element fallback for 100% guarantee in all browsers
 let currentAudio = null;
+
+// Global audio mode state: 'auto' | 'webspeech' | 'mp3'
+let audioMode = typeof window !== 'undefined' ? (localStorage.getItem('ielts_audio_mode') || 'auto') : 'auto';
+
+export const getAudioMode = () => audioMode;
+export const setAudioMode = (mode) => {
+  audioMode = mode;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('ielts_audio_mode', mode);
+  }
+};
 
 export const initSpeech = () => {
   if (typeof window === 'undefined') return;
 
   if (synth) {
-    voices = synth.getVoices();
-    if (synth.onvoiceschanged !== undefined) {
-      synth.onvoiceschanged = () => {
-        voices = synth.getVoices();
-      };
+    try {
+      voices = synth.getVoices();
+      if (synth.onvoiceschanged !== undefined) {
+        synth.onvoiceschanged = () => {
+          voices = synth.getVoices();
+        };
+      }
+    } catch (e) {
+      console.warn("SpeechSynthesis getVoices error:", e);
     }
   }
 
@@ -23,12 +36,18 @@ export const initSpeech = () => {
   const unlockAudio = () => {
     if (audioUnlocked) return;
     audioUnlocked = true;
-    if (synth && synth.paused) {
-      synth.resume();
+    
+    if (synth) {
+      try {
+        if (synth.paused) synth.resume();
+      } catch (e) {}
     }
-    // Create silent audio to prime HTML5 Audio
-    const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
-    silentAudio.play().catch(() => {});
+
+    // Play tiny silent audio buffer to unlock HTML5 Audio element on iOS/Safari/Chrome
+    try {
+      const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+      silentAudio.play().catch(() => {});
+    } catch (e) {}
 
     window.removeEventListener('click', unlockAudio);
     window.removeEventListener('keydown', unlockAudio);
@@ -42,48 +61,87 @@ export const initSpeech = () => {
 
 export const getVoices = () => {
   if (!synth) return [];
-  if (voices.length === 0) voices = synth.getVoices();
+  if (voices.length === 0) {
+    try { voices = synth.getVoices(); } catch (e) {}
+  }
   return voices;
 };
 
-// Play audio fallback via direct MP3 voice stream (UK / US accent)
+// Multi-Source MP3 Audio Player with fallback providers
 export const playFallbackAudio = (word, accent = 'en-GB', rate = 1.0) => {
   if (typeof window === 'undefined') return;
 
   if (currentAudio) {
-    currentAudio.pause();
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) {}
     currentAudio = null;
   }
 
-  // Type 1 = UK Accent, Type 2 = US Accent
-  const type = accent === 'en-GB' ? 1 : 2;
-  const audioUrl = `https://dict.youdao.com/dictvoice?type=${type}&audio=${encodeURIComponent(word)}`;
+  const cleanWord = encodeURIComponent(word.trim().toLowerCase());
+  const isUK = accent === 'en-GB';
 
-  currentAudio = new Audio(audioUrl);
-  currentAudio.playbackRate = rate;
+  // Array of reliable TTS audio URL providers
+  const audioProviders = [
+    // Provider 1: Youdao Dictionary Voice (Type 1 = UK, Type 2 = US)
+    `https://dict.youdao.com/dictvoice?type=${isUK ? 1 : 2}&audio=${cleanWord}`,
+    // Provider 2: Google Translate TTS (en-GB or en-US)
+    `https://translate.google.com/translate_tts?ie=UTF-8&tl=${isUK ? 'en-GB' : 'en-US'}&client=tw-ob&q=${cleanWord}`,
+    // Provider 3: Dictionary API MP3 Pronunciation
+    `https://api.dictionaryapi.dev/media/pronunciations/en/${cleanWord}-${isUK ? 'uk' : 'us'}.mp3`
+  ];
 
-  currentAudio.play().catch(err => {
-    console.warn("Audio playback fallback error:", err);
-  });
+  let providerIndex = 0;
+
+  const tryNextProvider = () => {
+    if (providerIndex >= audioProviders.length) {
+      console.warn("All audio fallback providers exhausted for word:", word);
+      return;
+    }
+
+    const currentUrl = audioProviders[providerIndex];
+    providerIndex++;
+
+    try {
+      const audio = new Audio(currentUrl);
+      audio.playbackRate = rate;
+      currentAudio = audio;
+
+      audio.play().catch(err => {
+        console.warn(`Audio provider ${providerIndex} failed, trying next:`, err);
+        tryNextProvider();
+      });
+
+      audio.onerror = () => {
+        tryNextProvider();
+      };
+    } catch (err) {
+      tryNextProvider();
+    }
+  };
+
+  tryNextProvider();
 };
 
 export const speakWord = (word, options = {}) => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !word) return;
 
-  const { accent = 'en-GB', rate = 0.9, pitch = 1, forceFallback = false } = options;
+  const { accent = 'en-GB', rate = 0.9, pitch = 1 } = options;
 
-  if (forceFallback || !synth) {
+  // Force MP3 stream mode if set by user
+  if (audioMode === 'mp3' || !synth) {
     playFallbackAudio(word, accent, rate);
     return;
   }
 
   try {
-    // Chrome bug fix: resume if paused
+    // WebKit / Chrome fix: Ensure speech engine is active & unpaused
     if (synth.paused) {
       synth.resume();
     }
-    
-    // Cancel any current utterance
+
+    // Safely stop previous utterances
     synth.cancel();
 
     const utterance = new SpeechSynthesisUtterance(word);
@@ -102,27 +160,29 @@ export const speakWord = (word, options = {}) => {
       utterance.voice = matchedVoice;
     }
 
-    let spoken = false;
+    let spokenStarted = false;
+
     utterance.onstart = () => {
-      spoken = true;
+      spokenStarted = true;
     };
 
     utterance.onerror = (e) => {
-      console.warn("SpeechSynthesis error, switching to fallback MP3:", e);
+      console.warn("SpeechSynthesis error event fired, using MP3 audio fallback:", e);
       playFallbackAudio(word, accent, rate);
     };
 
     synth.speak(utterance);
 
-    // If SpeechSynthesis fails to start within 400ms, use MP3 fallback
+    // Watchdog timer: If SpeechSynthesis doesn't start speaking within 350ms, trigger MP3 fallback!
     setTimeout(() => {
-      if (!spoken && !synth.speaking) {
+      if (!spokenStarted && (!synth.speaking || synth.paused)) {
+        console.warn("SpeechSynthesis timeout, switching to MP3 audio fallback...");
         playFallbackAudio(word, accent, rate);
       }
-    }, 400);
+    }, 350);
 
   } catch (err) {
-    console.warn("SpeechSynthesis exception, fallback MP3:", err);
+    console.warn("SpeechSynthesis exception, playing fallback MP3:", err);
     playFallbackAudio(word, accent, rate);
   }
 };

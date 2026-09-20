@@ -152,6 +152,10 @@ export default function SpeedRushGame({ words, accent, onMasterWord }) {
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 placeholder="Type & press Enter..."
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck="false"
                 className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-amber-500/50 text-center text-lg font-bold text-white font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
                 autoFocus
               />

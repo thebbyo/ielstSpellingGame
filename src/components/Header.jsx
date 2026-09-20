@@ -1,6 +1,6 @@
-import React from 'react';
-import { Volume2, Flame, Award, BookOpen, Clock, RefreshCw, VolumeX } from 'lucide-react';
-import { speakWord } from '../utils/speech';
+import React, { useState } from 'react';
+import { Volume2, Flame, Award, BookOpen, Clock, RefreshCw, VolumeX, Settings2 } from 'lucide-react';
+import { speakWord, getAudioMode, setAudioMode } from '../utils/speech';
 
 export default function Header({ 
   masteredCount, 
@@ -12,6 +12,13 @@ export default function Header({
   onResetProgress 
 }) {
   const percentage = Math.round((masteredCount / totalWords) * 100);
+  const [currentAudioMode, setCurrentAudioMode] = useState(getAudioMode());
+
+  const handleModeChange = (mode) => {
+    setAudioMode(mode);
+    setCurrentAudioMode(mode);
+    speakWord('Audio engine set to ' + (mode === 'mp3' ? 'MP3 Voice Stream' : 'Speech Synthesis'), { accent });
+  };
 
   return (
     <header className="sticky top-0 z-40 glass-card border-b border-slate-800/80 px-4 lg:px-8 py-3.5 mb-6">
@@ -52,7 +59,7 @@ export default function Header({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Streak Counter */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
             <Flame className={`w-4 h-4 ${streak > 0 ? 'text-amber-400 animate-bounce' : 'text-slate-500'}`} />
@@ -68,6 +75,17 @@ export default function Header({
           >
             <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> Test Audio
           </button>
+
+          {/* Audio Engine Selector */}
+          <select
+            value={currentAudioMode}
+            onChange={(e) => handleModeChange(e.target.value)}
+            title="Switch Audio Sound Source"
+            className="px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-400"
+          >
+            <option value="auto">🔊 Auto (Speech API)</option>
+            <option value="mp3">🎵 MP3 Voice Stream</option>
+          </select>
 
           {/* Voice Accent Switcher */}
           <button

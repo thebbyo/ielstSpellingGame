@@ -3,10 +3,21 @@ import { FileCheck, Volume2, ArrowRight, Award, CheckCircle2, XCircle, RotateCcw
 import confetti from 'canvas-confetti';
 import { speakWord } from '../utils/speech';
 
+// Normalize text helper to prevent false failures from spacing or quotes
+const normalizeWord = (text) => {
+  if (!text) return '';
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ');
+};
+
 export default function MockExam({ words, accent }) {
-  const [examLength, setExamLength] = useState(1200); // Default to all 1200 words or 40/100/500
+  const [examLength, setExamLength] = useState(1200);
   const [examWords, setExamWords] = useState([]);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState({}); // ID-locked mapping: { [word.id]: string }
   const [currentIndex, setCurrentIndex] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [userInput, setUserInput] = useState('');
@@ -22,7 +33,7 @@ export default function MockExam({ words, accent }) {
   const initExam = (lengthTarget = examLength) => {
     let selected = [];
     if (lengthTarget >= words.length) {
-      selected = [...words]; // All 1200 words
+      selected = [...words]; // All 1200 words in exact order
     } else {
       const shuffled = [...words].sort(() => Math.random() - 0.5);
       selected = shuffled.slice(0, lengthTarget);
@@ -50,17 +61,18 @@ export default function MockExam({ words, accent }) {
     if (e) e.preventDefault();
     if (!currentWord) return;
 
-    // Save current answer
-    const newAnswers = { ...answers, [currentIndex]: userInput.trim() };
+    // ID-Locked answer save
+    const newAnswers = { ...answers, [currentWord.id]: userInput.trim() };
     setAnswers(newAnswers);
 
     if (currentIndex < examWords.length - 1) {
       const nextIdx = currentIndex + 1;
+      const nextWord = examWords[nextIdx];
       setCurrentIndex(nextIdx);
-      setUserInput(newAnswers[nextIdx] || '');
-      speakWord(examWords[nextIdx].word, { accent });
+      setUserInput(newAnswers[nextWord.id] || '');
+      speakWord(nextWord.word, { accent });
     } else {
-      // Completed all questions
+      // Completed exam
       setSubmitted(true);
       confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
     }
@@ -68,15 +80,20 @@ export default function MockExam({ words, accent }) {
 
   const handlePrev = () => {
     if (currentIndex > 0) {
+      // Save current input before navigating back
+      if (currentWord) {
+        setAnswers(prev => ({ ...prev, [currentWord.id]: userInput.trim() }));
+      }
       const prevIdx = currentIndex - 1;
+      const prevWord = examWords[prevIdx];
       setCurrentIndex(prevIdx);
-      setUserInput(answers[prevIdx] || '');
-      speakWord(examWords[prevIdx].word, { accent });
+      setUserInput(answers[prevWord.id] || '');
+      speakWord(prevWord.word, { accent });
     }
   };
 
   const calculateGrandBand = (score, total) => {
-    const ratio = score / total;
+    const ratio = total > 0 ? score / total : 0;
     if (ratio >= 0.95) return { band: '9.0', title: 'Grand Master Expert', color: 'text-amber-400' };
     if (ratio >= 0.88) return { band: '8.5', title: 'Very Good User', color: 'text-emerald-400' };
     if (ratio >= 0.80) return { band: '8.0', title: 'Very Good User', color: 'text-cyan-400' };
@@ -86,7 +103,7 @@ export default function MockExam({ words, accent }) {
     return { band: '6.0', title: 'Modest User', color: 'text-slate-400' };
   };
 
-  // 1. Exam Configuration Selection Screen
+  // 1. Exam Setup Screen
   if (!examStarted && !submitted) {
     return (
       <div className="max-w-3xl mx-auto px-4">
@@ -101,7 +118,6 @@ export default function MockExam({ words, accent }) {
             Select your desired exam length to evaluate your listening spelling mastery under real IELTS conditions.
           </p>
 
-          {/* Test Length Options */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-8">
             {[
               { count: 40, label: 'Standard IELTS', desc: '40 Questions (1 Test)' },
@@ -147,16 +163,18 @@ export default function MockExam({ words, accent }) {
   // 2. Exam Summary Results Screen
   if (submitted) {
     let score = 0;
-    examWords.forEach((w, idx) => {
-      const userAns = (answers[idx] || '').trim().toLowerCase();
-      if (userAns === w.word.toLowerCase()) score++;
+    examWords.forEach((w) => {
+      const userAns = answers[w.id] || '';
+      if (normalizeWord(userAns) === normalizeWord(w.word)) {
+        score++;
+      }
     });
 
     const result = calculateGrandBand(score, examWords.length);
-    const percentage = Math.round((score / examWords.length) * 100);
+    const percentage = examWords.length > 0 ? Math.round((score / examWords.length) * 100) : 0;
 
     const displayedBreakdown = filterIncorrectOnly 
-      ? examWords.filter((w, idx) => (answers[idx] || '').trim().toLowerCase() !== w.word.toLowerCase())
+      ? examWords.filter((w) => normalizeWord(answers[w.id] || '') !== normalizeWord(w.word))
       : examWords;
 
     return (
@@ -169,7 +187,6 @@ export default function MockExam({ words, accent }) {
           </h2>
           <p className="text-xs text-slate-400 mb-6">Comprehensive IELTS Listening Evaluation</p>
 
-          {/* Result Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto mb-8">
             <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800">
               <span className="text-xs text-slate-400 block font-semibold">Total Score</span>
@@ -190,7 +207,6 @@ export default function MockExam({ words, accent }) {
             </div>
           </div>
 
-          {/* Breakdown Header */}
           <div className="flex items-center justify-between mb-3 text-left">
             <h3 className="text-sm font-bold text-slate-200">
               Detailed Answer Breakdown ({displayedBreakdown.length} words)
@@ -205,18 +221,18 @@ export default function MockExam({ words, accent }) {
             </button>
           </div>
 
-          {/* Detailed Breakdown List */}
           <div className="max-h-96 overflow-y-auto border border-slate-800 rounded-2xl p-2 bg-slate-950/70 text-left text-xs space-y-1.5 mb-8">
-            {displayedBreakdown.map((w) => {
-              const origIndex = examWords.findIndex(item => item.id === w.id);
-              const userAns = answers[origIndex] || '';
-              const isCorrect = userAns.toLowerCase() === w.word.toLowerCase();
+            {displayedBreakdown.map((w, idx) => {
+              const userAns = answers[w.id] || '';
+              const isCorrect = normalizeWord(userAns) === normalizeWord(w.word);
+              const qNumber = examWords.findIndex(item => item.id === w.id) + 1;
+
               return (
                 <div key={w.id} className={`p-3 rounded-xl border flex items-center justify-between ${
                   isCorrect ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-rose-950/30 border-rose-500/40'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-slate-500 font-bold min-w-[40px]">Q{origIndex + 1}.</span>
+                    <span className="font-mono text-slate-500 font-bold min-w-[45px]">Q{qNumber}.</span>
                     {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <XCircle className="w-4 h-4 text-rose-400 shrink-0" />}
                     <div>
                       <span className="font-extrabold text-white text-sm font-mono">{w.word}</span>
@@ -247,7 +263,7 @@ export default function MockExam({ words, accent }) {
 
   // 3. Active Exam Question Screen
   const answeredCount = Object.keys(answers).length;
-  const progressPct = Math.round(((currentIndex + 1) / examWords.length) * 100);
+  const progressPct = examWords.length > 0 ? Math.round(((currentIndex + 1) / examWords.length) * 100) : 0;
 
   return (
     <div className="max-w-3xl mx-auto px-4">
@@ -284,6 +300,7 @@ export default function MockExam({ words, accent }) {
         {/* Audio Player */}
         <div className="text-center py-6">
           <button
+            type="button"
             onClick={() => speakWord(currentWord?.word, { accent })}
             className="w-24 h-24 rounded-full bg-gradient-to-tr from-cyan-500 to-purple-600 hover:scale-105 active:scale-95 text-white flex items-center justify-center mx-auto mb-4 shadow-xl glow-cyan transition-all group"
           >
@@ -295,11 +312,16 @@ export default function MockExam({ words, accent }) {
           </p>
 
           <form onSubmit={handleNext} className="max-w-md mx-auto">
+            {/* Input with strict prediction & autocorrect disabled */}
             <input
               type="text"
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               placeholder="Enter exact IELTS spelling..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck="false"
               className="w-full px-5 py-4 rounded-2xl bg-slate-900 border border-slate-700 text-center text-xl font-bold text-white font-mono focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/30 mb-4"
               autoFocus
             />
@@ -318,7 +340,7 @@ export default function MockExam({ words, accent }) {
                 type="submit"
                 className="flex-1 py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5"
               >
-                {currentIndex === examWords.length - 1 ? 'Submit Complete 1200 Exam' : 'Next Question'} <ArrowRight className="w-4 h-4" />
+                {currentIndex === examWords.length - 1 ? 'Submit Complete Exam' : 'Next Question'} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>

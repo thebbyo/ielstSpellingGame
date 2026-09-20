@@ -78,6 +78,10 @@ export default function MistakeVault({ mistakeWords, onRemoveMistake, accent, on
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               placeholder="Correct spelling..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck="false"
               className={`w-full px-4 py-3 rounded-xl bg-slate-900 border text-center text-lg font-bold font-mono focus:outline-none transition-all ${
                 status === 'correct' ? 'border-emerald-500 text-emerald-300 bg-emerald-950/30' :
                 status === 'incorrect' ? 'border-rose-500 text-rose-300 bg-rose-950/30' : 'border-rose-500/50 text-white'

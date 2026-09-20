@@ -50,11 +50,13 @@ export default function ListeningBeeGame({
     const trimmedInput = userInput.trim();
     const targetWord = currentWord.word;
     
-    // Check answer (case-insensitive for basic compare, but alert if capital was missing for proper nouns!)
-    const isExact = trimmedInput === targetWord;
-    const isCaseInsensitiveMatch = trimmedInput.toLowerCase() === targetWord.toLowerCase();
+    // Normalize punctuation & spaces
+    const normInput = trimmedInput.toLowerCase().replace(/[’']/g, "'").replace(/[–—]/g, '-').replace(/\s+/g, ' ');
+    const normTarget = targetWord.toLowerCase().replace(/[’']/g, "'").replace(/[–—]/g, '-').replace(/\s+/g, ' ');
 
-    if (isCaseInsensitiveMatch) {
+    const isMatch = normInput === normTarget;
+
+    if (isMatch) {
       setStatus('correct');
       onMasterWord(currentWord.id);
       setStreak(prev => prev + 1);
@@ -199,6 +201,10 @@ export default function ListeningBeeGame({
               onChange={(e) => setUserInput(e.target.value)}
               disabled={status !== 'idle'}
               placeholder="Type your spelling here..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck="false"
               className={`w-full px-5 py-4 rounded-2xl bg-slate-900 border text-center text-xl font-bold tracking-wide font-mono focus:outline-none transition-all ${
                 status === 'correct'
                   ? 'border-emerald-500 bg-emerald-950/30 text-emerald-300 ring-2 ring-emerald-500/40'
